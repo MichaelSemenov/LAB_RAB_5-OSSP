@@ -16,10 +16,10 @@ int counter_producer = 0;
 int counter_consumer = 0;
 
 struct Message {
-    int id;
+    int id = NULL;
     string text;
 };
-
+Message* message;
 
 class MessageQueue {
 public:
@@ -28,37 +28,46 @@ public:
         added(0), extracted(0) {}
 
     void addMessage(Message* message) {               
-        unique_lock<mutex> lock(mtx);
-        unique_lock<mutex> lock_t(test);
-        while (added - extracted == messages.size()) {
-            not_full.wait(lock);
-        }
-        while (ready) {
-            cv.wait(lock_t);
-        }
+        //unique_lock<mutex> lock(mtx);
+        //unique_lock<mutex> lock_t(test);
+        //while (added - extracted == messages.size()) {
+        //    not_full.wait(lock);
+        //}
+        //while (ready) {
+        //    cv.wait(lock_t);
+        //}
+        mtx.lock();
         messages[tail] = message;
         tail = (tail + 1) % messages.size();
         added++;
+        mtx.unlock();
         this_thread::sleep_for(chrono::milliseconds(2000));
-        not_empty.notify_one();
+        //not_empty.notify_one();
     }
 
 
     Message* getMessage() {
-        unique_lock<mutex> lock(mtx);
-        unique_lock<mutex> lock_t(test);
-        while (added == extracted) {
-            not_empty.wait(lock);                                    
-        }
-        while (ready) {
-            cv.wait(lock_t);
-        }
-        Message* message = messages[head];
-        head = (head + 1) % messages.size();
-        extracted++;
-        this_thread::sleep_for(chrono::milliseconds(2000));
-        not_full.notify_one();
+        //unique_lock<mutex> lock(mtx);
+        //unique_lock<mutex> lock_t(test);
+        //while (added == extracted) {
+        //    not_empty.wait(lock);                                    
+        //}
+        //while (ready) {
+        //    cv.wait(lock_t);
+        //}
+                
+        test.lock();
+                message= messages[head];
+                head = (head + 1) % messages.size();
+                extracted++;
+                --added;
+        test.unlock(); 
+                this_thread::sleep_for(chrono::milliseconds(2000));
+
+
+        /*not_full.notify_one();*/
         return message;
+
     }
     ~MessageQueue()
     {
@@ -76,17 +85,35 @@ public:
 };
 
 void producer(MessageQueue* queue, int id) {
+    
+    while (true)
+    {
+        if (queue->added == 9) {
+            continue;
+        }
+        
         Message* message = new Message();
-        message->id = id;     
+        message->id = id;
         message->text = "Message from producer " + to_string(id);
         queue->addMessage(message);
+        }
+
+
 }
 
 void consumer(MessageQueue* queue, int id) {
+   // test.lock();
+    while (true) {
+        if (queue->added == 0) {
+            continue;
+        }
         Message* message = queue->getMessage();
         cout << "Consumer " << id << " got message #" << message->id
             << " with text: " << message->text << endl;
         delete message;
+    }
+
+       // test.unlock();
 }
 
 void show_info() {
@@ -107,8 +134,10 @@ void message_add(MessageQueue& queue) {
 
 void message_put_away(MessageQueue& queue) {
     ready = true;
+    string str = queue.messages.at(queue.messages.size() - 1)->text;
+    cout << "Удалена строка из очереди: " << str << endl;
     queue.messages.resize(queue.messages.size() - 1);
-    cv.notify_all();
+   /* cv.notify_all();*/
     ready = false;
 }
 
